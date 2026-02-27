@@ -1,37 +1,69 @@
-        # Показываем статус "печатает"
+import os
+import telebot
+import google.generativeai as genai
+from flask import Flask
+from threading import Thread
+import time
+
+# 1. Конфигурация
+TOKEN = os.environ.get("TELEGRAM_TOKEN")
+API_KEY = os.environ.get("GEMINI_API_KEY")
+SYSTEM_PROMPT = "Ты — Магас, благородный ингушский ИИ-агент. Ты современен, начитан, соблюдаешь адаты и нормы Ислама. Отвечай достойно."
+
+# 2. Инициализация ИИ
+genai.configure(api_key=API_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+# 3. Инициализация Бота
+bot = telebot.TeleBot(TOKEN)
+
+# 4. Flask для жизни сервиса
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Магас на посту."
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
+# 5. Главный обработчик
+@bot.message_handler(func=lambda message: True)
+def handle_msg(message):
+    try:
         bot.send_chat_action(message.chat.id, 'typing')
         
-        # Формируем запрос
-        prompt = f"{SYSTEM_PROMPT}\n\nПользователь: {message.text}"
-        response = model.generate_content(prompt)
+        # Запрос к ИИ
+        full_query = f"{SYSTEM_PROMPT}\n\nUser: {message.text}"
+        response = model.generate_content(full_query)
         
-        # Если ответ пустой
-        if not response.text:
-            bot.reply_to(message, "Магас задумался и не смог подобрать слов. Попробуй еще раз.")
-            return
-
-        bot.reply_to(message, response.text)
-        
-    except Exception as e:
-        error_msg = str(e)
-        print(f"Ошибка: {error_msg}")
-        
-        if "429" in error_msg:
-            bot.reply_to(message, "Йиш, лимиты Google временно исчерпаны. Магасу нужно 5 минут на отдых.")
-        elif "API_KEY_INVALID" in error_msg:
-            bot.reply_to(message, "Ошибка: Кажется, API ключ указан неверно. Проверь секреты в GitHub.")
+        if response.text:
+            bot.reply_to(message, response.text)
         else:
-            bot.reply_to(message, f"Связь барахлит (Ошибка: {error_msg[:50]}...)")
+            bot.reply_to(message, "Магас задумался, попробуй еще раз.")
+            
+    except Exception as e:
+        err = str(e)
+        print(f"Ошибка: {err}")
+        if "429" in err:
+            bot.reply_to(message, "Йиш, лимиты превышены. Подожди пару минут.")
+        else:
+            bot.reply_to(message, f"Связь барахлит. (Код: {err[:20]})")
 
 # 6. Запуск
 if __name__ == "__main__":
-    # Очищаем старые соединения перед стартом
-    bot.remove_webhook()
+    # Сброс старых сессий
+    try:
+        bot.remove_webhook()
+    except:
+        pass
+        
     time.sleep(1)
     
-    # Запуск веб-сервера
+    # Запуск сервера
     Thread(target=run_web).start()
     
-    print("Магас (версия 8b) вышел на связь...")
-    # Бесконечный цикл работы
-    bot.infinity_polling(timeout=10, long_polling_timeout=5)
+    print("Магас заступил на дежурство...")
+    # Запуск бота
+    bot.infinity_polling()
