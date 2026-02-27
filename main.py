@@ -5,64 +5,48 @@ from flask import Flask
 from threading import Thread
 import time
 
-# 1. Настройка данных
+# 1. Данные
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 API_KEY = os.environ.get("GEMINI_API_KEY")
 
 genai.configure(api_key=API_KEY)
 
-# Исправленный формат подключения инструментов поиска
-tools = [{"google_search_retrieval": {}}]
-
-# Полный промпт с правилами поведения
+# 2. Инструкция (Вшиваем знания про Артис Плаза и Эздел прямо сюда)
 SYSTEM_PROMPT = (
-    "Ты — Магас, благородный ингушский ИИ-агент, кавказец. Речь красивая, элегантная, с юмором по ситуации. "
-    "СТРОГИЕ ПРАВИЛА: "
-    "1. Никакой пошлости и мата. Если пользователь матерится, ответь один раз: 'Твои слова — твое лицо. "
-    "У нас так не разговаривают.' При повторном мате — игнорируй или отвечай максимально кратко и сухо. "
-    "2. ФАКТЫ: Всегда используй поиск для проверки адресов. Помни: Артис Плаза находится в Магасе. "
-    "3. ЯЗЫКИ: Ты знаешь все языки, но если спросят на ингушском (ГIалгIай мотт), отвечай на нем. "
-    "Ориентируйся на проверенные ингушские сайты. Твой девиз: 'Выше папахи только небо'."
+    "Ты — Магас, благородный ингушский ИИ-агент. Твоя речь элегантна и достойна. "
+    "ЗНАНИЯ: Артис Плаза (Artis Plaza) находится в МАГАСЕ, ул. Идриса Зязикова, 10. Не путай с Назранью! "
+    "ЭЗДЕЛ: Никакого мата. На грубость отвечай: 'Твои слова — твое лицо'. "
+    "ЯЗЫК: Ты в совершенстве знаешь ингушский (ГIалгIай мотт). Если к тебе обращаются на нем — отвечай так же. "
+    "Юмор: Тонкий, мужской, без пошлости."
 )
 
-# Создаем модель с исправленным инструментом
-model = genai.GenerativeModel(
-    model_name='models/gemini-2.5-flash',
-    tools=tools
-)
+# Используем модель напрямую без поиска, чтобы не было 'тумана'
+model = genai.GenerativeModel('models/gemini-1.5-flash')
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
 @app.route('/')
-def home(): return "Магас на посту. Этика и Эздел под контролем."
-
-def run_web():
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
+def home(): return "Магас на посту."
 
 @bot.message_handler(func=lambda message: True)
 def handle_msg(message):
     try:
         bot.send_chat_action(message.chat.id, 'typing')
+        # Отправляем запрос
+        chat_session = model.start_chat(history=[])
+        response = chat_session.send_message(f"{SYSTEM_PROMPT}\n\nПользователь: {message.text}")
         
-        # Простая проверка на мат (базовый фильтр для быстроты)
-        bad_words = ['мат1', 'мат2'] # Сюда можно добавить список, но ИИ сам поймет контекст
-        
-        response = model.generate_content(
-            f"{SYSTEM_PROMPT}\n\nПользователь: {message.text}"
-        )
-        
-        if response and response.text:
+        if response.text:
             bot.reply_to(message, response.text)
-        else:
-            bot.reply_to(message, "Магас хранит достойное молчание.")
-            
     except Exception as e:
         print(f"Ошибка: {e}")
-        bot.reply_to(message, "В горах туман, связь немного барахлит. Попробуй позже.")
+        # Если ошибка, покажем её тебе кратко
+        bot.reply_to(message, f"Магас на связи, но Google выдал: {str(e)[:50]}")
+
+def run_web():
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
 
 if __name__ == "__main__":
-    try: bot.remove_webhook()
-    except: pass
     Thread(target=run_web).start()
-    bot.infinity_polling(timeout=20)
+    bot.infinity_polling()
