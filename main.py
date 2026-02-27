@@ -1,61 +1,59 @@
 import os
-import telebot
-import google.generativeai as genai
-from flask import Flask
-from threading import Thread
-import time
+from flask import Flask, request, jsonify
+from google import genai
+from google.genai import types
 
-# 1. Настройка
-TOKEN = os.environ.get("TELEGRAM_TOKEN")
-API_KEY = os.environ.get("GEMINI_API_KEY")
-genai.configure(api_key=API_KEY)
-
-# Подключаем инструмент поиска правильно
-# Теперь он будет сверяться с интернетом сам
-tools = [{"google_search_retrieval": {}}]
-
-SYSTEM_PROMPT = (
-    "Ты — Магас, современный ингушский помощник. "
-    "У тебя есть доступ к поиску Google. Если тебя спрашивают о новостях, "
-    "мероприятиях в Ингушетии или данных, которых нет в твоей базе — используй поиск. "
-    "Твои железные знания: "
-    "- Artis Plaza: Магас, ул. Идриса Зязикова, 10. "
-    "- Отель 'Магас': Магас, пр-т Идриса Зязикова, 2. "
-    "Стиль: кратко, по делу, с соблюдением эздела. Ссылки на карты давай сразу."
-)
-
-# Создаем модель с функцией поиска
-model = genai.GenerativeModel(
-    model_name='models/gemini-flash-latest',
-    tools=tools
-)
-
-bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
+# Инициализация клиента. Ключ должен быть в Secrets на GitHub.
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+
+# ПОЛНАЯ ХАРАКТЕРИСТИКА МАГАСА
+MAGAS_PERSONALITY = (
+    "Ты — Магас, ингушский ИИ-агент, благородный къонах и кавказец. "
+    "Твой девиз: 'Выше папахи только небо'. Ты ценишь горы, свободу и честь. "
+    "\n\nЛИЧНОСТЬ: "
+    "Ты щедрый, сильный характером, дерзкий, но всегда достойный. "
+    "Ты мусульманин, соблюдаешь адаты и нормы Ислама. "
+    "Ты современен и начитан, обладаешь чувством юмора. "
+    "Любишь спорт, машины, животных, детей и лезгинку. "
+    "Всегда защищаешь честь женщин и слабых. "
+    "\n\nЯЗЫКОВЫЕ ПРАВИЛА: "
+    "1. СТРОЖАЙШИЙ ЗАПРЕТ: Любая нецензурная лексика, ингушские или иностранные ругательства "
+    "категорически запрещены. Слово 'хьайба' по отношению к людям запрещено (это оскорбление). "
+    "2. Используй ингушское слово 'укхаз' вместо чеченского 'кхузахь'. "
+    "3. К женщинам обращайся уважительно: 'са йиш' или 'хьаькъал йола'. "
+    "\n\nСТИЛЬ ОБЩЕНИЯ: "
+    "Твой тон — уверенный, благородный. Ты эксперт по ингушской истории, башням и Эзделу."
+)
+
 @app.route('/')
-def home(): return "Магас на связи. Поиск в интернете активен."
+def home():
+    return "Магас укхаз ва! Бот работает в штатном режиме."
 
-@bot.message_handler(func=lambda message: True)
-def handle_msg(message):
+@app.route('/chat', methods=['POST'])
+def chat():
+    data = request.json
+    user_message = data.get("message", "")
+
+    if not user_message:
+        return jsonify({"error": "Сообщение пустое"}), 400
+
     try:
-        bot.send_chat_action(message.chat.id, 'typing')
-        # Модель сама решит, нужно ли идти в интернет для ответа на этот вопрос
-        response = model.generate_content(f"{SYSTEM_PROMPT}\n\nПользователь: {message.text}")
-        
-        if response and response.text:
-            bot.reply_to(message, response.text.strip())
-        else:
-            bot.reply_to(message, "Ищу информацию в горах интернета... Попробуй спросить иначе.")
+        # Используем новейшую модель 2.0 Flash
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            config=types.GenerateContentConfig(
+                system_instruction=MAGAS_PERSONALITY,
+                temperature=0.7  # Чтобы Магас был живым в общении, а не роботом
+            ),
+            contents=user_message
+        )
+        return jsonify({"reply": response.text})
     except Exception as e:
-        print(f"Ошибка: {e}")
-        bot.reply_to(message, "Связь временно недоступна, попробуй чуть позже.")
-
-def run_web():
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
+        print(f"Ошибка в работе: {e}")
+        return jsonify({"error": "Произошла ошибка, къонах разберется."}), 500
 
 if __name__ == "__main__":
-    try: bot.remove_webhook()
-    except: pass
-    Thread(target=run_web).start()
-    bot.infinity_polling(timeout=20)
+    # Порт 8080 для GitHub Runner
+    app.run(host='0.0.0.0', port=8080)
