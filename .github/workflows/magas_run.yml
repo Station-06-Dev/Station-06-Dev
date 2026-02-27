@@ -15,20 +15,16 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.10' # Обновили версию
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyTelegramBotAPI google-generativeai
+          pip install pyTelegramBotAPI google-generativeai flask # Добавили flask сюда
 
       - name: Run Bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SYSTEM_PROMPT: ${{ secrets.SYSTEM_PROMPT }}
-        run: |
-          # Проверяем, где мы находимся и видим ли файл
-          ls -R
-          # Запускаем бота
-          python main.py
+        run: python main.py
