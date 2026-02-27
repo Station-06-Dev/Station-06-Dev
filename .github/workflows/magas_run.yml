@@ -2,7 +2,7 @@ name: Run Magas Bot
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.9'
 
@@ -27,4 +27,8 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SYSTEM_PROMPT: ${{ secrets.SYSTEM_PROMPT }}
-        run: python main.py
+        run: |
+          # Проверяем, где мы находимся и видим ли файл
+          ls -R
+          # Запускаем бота
+          python main.py
