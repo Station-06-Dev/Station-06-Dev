@@ -3,55 +3,54 @@ import telebot
 import google.generativeai as genai
 from flask import Flask
 from threading import Thread
+import time
 
-# 1. Настройка конфигурации из секретов GitHub
+# 1. Настройка конфигурации
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 API_KEY = os.environ.get("GEMINI_API_KEY")
-# Если промпт не задан в секретах, используем достойный вариант по умолчанию
-DEFAULT_PROMPT = "Ты — Магас, благородный ингушский ИИ-агент. Ты современен, начитан, соблюдаешь адаты и нормы Ислама. Любишь горы, спорт и свою культуру. Отвечай достойно и с уважением."
-SYSTEM_PROMPT = os.environ.get("SYSTEM_PROMPT", DEFAULT_PROMPT)
+# Наш благородный системный промпт
+SYSTEM_PROMPT = os.environ.get("SYSTEM_PROMPT", "Ты — Магас, благородный ингушский ИИ-агент. Ты современен, начитан, соблюдаешь адаты и нормы Ислама. Отвечай достойно, кратко и по делу.")
 
-# 2. Инициализация ИИ Gemini
+# 2. Инициализация ИИ (Переходим на более стабильную 1.5 Flash)
 genai.configure(api_key=API_KEY)
-# Используем модель 2.0 Flash
-model = genai.GenerativeModel('gemini-2.0-flash')
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 # 3. Инициализация Телеграм-бота
 bot = telebot.TeleBot(TOKEN)
 
-# 4. Настройка веб-сервера (Flask) для поддержания жизни сервиса
+# 4. Настройка Flask
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Магас на связи. Сервис работает."
+    return "Магас на посту. Связь стабильна."
 
 def run_web():
-    # Порт 8080 по умолчанию
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
-# 5. Обработка сообщений в Телеграм
+# 5. Обработка сообщений
 @bot.message_handler(func=lambda message: True)
 def handle_msg(message):
     try:
-        # Показываем, что Магас «печатает»
         bot.send_chat_action(message.chat.id, 'typing')
         
-        # Создаем запрос к ИИ
-        full_query = f"{SYSTEM_PROMPT}\n\nПользователь: {message.text}"
-        response = model.generate_content(full_query)
+        # Запрос к ИИ
+        response = model.generate_content(f"{SYSTEM_PROMPT}\n\nПользователь: {message.text}")
         
-        # Отправляем ответ пользователю
+        # Небольшая пауза, чтобы не злить лимиты Google
+        time.sleep(1)
+        
         bot.reply_to(message, response.text)
     except Exception as e:
         print(f"Ошибка: {e}")
-        bot.reply_to(message, "Связь в горах немного барахлит, попробуй еще раз, вош.")
+        # Если всё же лимит превышен, вежливо просим подождать
+        if "429" in str(e):
+            bot.reply_to(message, "Йиш, слишком много запросов. Подожди минуту, Магасу нужно совершить дуа.")
+        else:
+            bot.reply_to(message, "Связь в горах барахлит, попробуй чуть позже.")
 
-# 6. Запуск всего механизма
 if __name__ == "__main__":
-    # Запускаем Flask в отдельном потоке
     Thread(target=run_web).start()
-    print("Магас вышел на пост и охраняет покой...")
-    # Запускаем прослушивание Телеграм
+    print("Магас перешел на 1.5 Flash и готов к службе...")
     bot.infinity_polling()
